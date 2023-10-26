@@ -9,6 +9,7 @@
 #include "object.h"
 #include "sphere.h"
 #include "light.h"
+#include "camera.h"
 
 const int SCREEN_WIDTH = 800;
 const int SCREEN_HEIGHT = 600;
@@ -17,6 +18,8 @@ const float ASPECT_RATIO = static_cast<float>(SCREEN_WIDTH) / static_cast<float>
 SDL_Renderer* renderer;
 std::vector<Object*> objects;
 Light light(glm::normalize(glm::vec3(-1, 0.5, 3)), 1.5f);
+Camera camera(glm::vec3(0, 0, -20.0f), glm::vec3(0, 0, 0), 10.0f);
+
 
 void point(glm::vec2 position, Color color) {
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
@@ -67,15 +70,25 @@ void render() {
     float fov = 3.1415/3;
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
         for (int x = 0; x < SCREEN_WIDTH; x++) {
+            float random_value = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+            if (random_value > 0.2) {
+                continue;
+            }
             float screenX = (2.0f * (x + 0.5f)) / SCREEN_WIDTH - 1.0f;
             float screenY = -(2.0f * (y + 0.5f)) / SCREEN_HEIGHT + 1.0f;
             screenX *= ASPECT_RATIO;
             screenX *= tan(fov/2.0f);
             screenY *= tan(fov/2.0f);
 
-            glm::vec3 rayDirection = glm::normalize(glm::vec3(screenX, screenY, -1.0f));
+            glm::vec3 cameraDir = glm::normalize(camera.target - camera.position);
+
+            // Compute the real right and up vectors
+            glm::vec3 cameraX = glm::normalize(glm::cross(cameraDir, camera.up));
+            glm::vec3 cameraY = glm::cross(cameraX, cameraDir);
+
+            glm::vec3 rayDirection = glm::normalize(cameraDir + cameraX * screenX + cameraY * screenY);
             
-            Color pixelColor = castRay(glm::vec3(0.0f, 0.0f, 0.0f), rayDirection);
+            Color pixelColor = castRay(camera.position, rayDirection);
 
             point(glm::vec2(x, y), pixelColor);
         }
@@ -122,8 +135,39 @@ int main(int argc, char* argv[]) {
 
     while (running) {
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = false;
+            switch (event.type) {
+                case SDL_QUIT:
+                    running = false;
+                    break;
+                case SDL_KEYDOWN:
+                    switch (event.key.keysym.sym) {
+                        case SDLK_UP:
+                            // Move closer to the target
+                            camera.move(-1.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        case SDLK_DOWN:
+                            // Move away from the target
+                            camera.move(1.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        case SDLK_a:
+                            // Rotate up
+                            camera.rotate(-1.0f, 0.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        case SDLK_d:
+                            // Rotate down
+                            camera.rotate(1.0f, 0.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        case SDLK_w:
+                            // Rotate left
+                            camera.rotate(0.0f, -1.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        case SDLK_s:
+                            // Rotate right
+                            camera.rotate(0.0f, 1.0f);  // You may need to adjust the value as per your needs
+                            break;
+                        default:
+                            break;
+                    }
             }
         }
 
