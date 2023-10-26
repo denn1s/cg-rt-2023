@@ -3,5 +3,5 @@
 #include "color.h"
 
 struct Material {
-  Color diffuse;
+ Color diffuse;
 };
