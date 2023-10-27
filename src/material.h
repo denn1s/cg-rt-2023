@@ -8,4 +8,6 @@ struct Material {
   float specularAlbedo;
   float specularCoefficient;
   float reflectivity; // The reflectivity of the material
+  float transparency; // The transparency of the material
+  float refractionIndex;
 };

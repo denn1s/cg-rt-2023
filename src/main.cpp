@@ -91,7 +91,16 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const s
         reflectedColor = castRay(offsetOrigin, reflectDir, recursion + 1);
     }
 
-    Color color = (diffuseLight + specularLight) * (1 - mat.reflectivity) + reflectedColor * mat.reflectivity;
+    // If the material is refractive, cast a refracted ray
+    Color refractedColor(0.0f, 0.0f, 0.0f);
+    if (mat.transparency > 0) {        
+        glm::vec3 refractDir = glm::refract(rayDirection, intersect.normal, mat.refractionIndex);
+        glm::vec3 offsetOrigin = intersect.point - intersect.normal * SHADOW_BIAS; // moving along opposite to normal for refraction ray
+        refractedColor = castRay(offsetOrigin, refractDir, recursion + 1);
+    }
+
+    Color color = (diffuseLight + specularLight) * (1 - mat.reflectivity - mat.transparency) + reflectedColor * mat.reflectivity + refractedColor * mat.transparency;
+
     return color;
 } 
 
@@ -101,6 +110,7 @@ void setUp() {
         0.9,
         0.1,
         10.0f,
+        0.0f,
         0.0f
     };
 
@@ -109,7 +119,8 @@ void setUp() {
         0.5,
         0.5,
         50.0f,
-        0.2f
+        0.2f,
+        0.0f
     };
 
     Material mirror(
@@ -117,12 +128,25 @@ void setUp() {
         0.0f,
         10.0f,
         1425.0f,
-        0.9f
+        0.9f,
+        0.0f
+    );
+
+    Material glass(
+        Color(255, 255, 255),
+        0.1f,
+        1.0f,
+        125.0f,
+        0.0f,
+        0.9f,
+        0.1f
     );
 
     objects.push_back(new Sphere(glm::vec3(0.0f, 0.0f, 0.0f), 1.0f, rubber));
     objects.push_back(new Sphere(glm::vec3(-1.0f, 0.0f, -4.0f), 1.0f, ivory));
     objects.push_back(new Sphere(glm::vec3(1.0f, 0.0f, -4.0f), 1.0f, mirror));
+    objects.push_back(new Sphere(glm::vec3(0.0f, 2.0f, -4.0f), 1.0f, glass));
+
 }
 
 void render() {
