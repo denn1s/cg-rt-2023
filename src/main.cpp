@@ -17,7 +17,8 @@ const float ASPECT_RATIO = static_cast<float>(SCREEN_WIDTH) / static_cast<float>
 
 SDL_Renderer* renderer;
 std::vector<Object*> objects;
-Light light(glm::normalize(glm::vec3(-1, 0.5, 3)), 1.5f);
+Light light(glm::normalize(glm::vec3(-1, 0.5, 3)), 1.5f, Color(255, 255, 255));
+
 Camera camera(glm::vec3(0, 0, -20.0f), glm::vec3(0, 0, 0), 10.0f);
 
 
@@ -47,18 +48,45 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
     float diffuseLightIntensity = std::max(0.0f, glm::dot(intersect.normal, light.position));
 
     Material mat = hitObject->material;
-    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity;
-    Color color = diffuseLight;
+
+    glm::vec3 lightDir = glm::normalize(light.position - intersect.point);
+    glm::vec3 viewDir = glm::normalize(rayOrigin - intersect.point);
+
+    
+    // Calculate the reflection direction vector
+    // Reflect the negative light direction vector about the normal vector at the intersection point
+    glm::vec3 reflectDir = glm::reflect(-lightDir, intersect.normal);
+    
+    // Calculate the specular light intensity
+    // This is done by taking the dot product between the view direction and the reflected light direction,
+    // and raising it to the power of the specular coefficient
+    float spec = std::pow(std::max(0.0f, glm::dot(viewDir, reflectDir)), mat.specularCoefficient);
+
+    // Calculate the color for the diffuse light
+    // Intensity times albedo times color for diffuse light (Lambertian reflection)
+    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo;
+
+    // Calculate the color for the specular light
+    // Intensity times albedo times color for specular light (Phong reflection)
+    Color specularLight = light.color * light.intensity * spec * mat.specularAlbedo;
+
+    Color color = diffuseLight + specularLight;
     return color;
 } 
 
 void setUp() {
     Material rubber = {
-        Color(80, 0, 0)   // diffuse
+        Color(80, 0, 0),   // diffuse
+        0.9f,
+        0.1f,
+        10.0f
     };
 
     Material ivory = {
-        Color(100, 100, 80)
+        Color(100, 100, 80),
+        0.6f,
+        0.3f,
+        50.0f
     };
 
 
@@ -70,10 +98,10 @@ void render() {
     float fov = 3.1415/3;
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
         for (int x = 0; x < SCREEN_WIDTH; x++) {
-            float random_value = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-            if (random_value > 0.2) {
-                continue;
-            }
+            /* float random_value = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX); */
+            /* if (random_value > 0.2) { */
+                /* continue; */
+            /* } */
             float screenX = (2.0f * (x + 0.5f)) / SCREEN_WIDTH - 1.0f;
             float screenY = -(2.0f * (y + 0.5f)) / SCREEN_HEIGHT + 1.0f;
             screenX *= ASPECT_RATIO;
