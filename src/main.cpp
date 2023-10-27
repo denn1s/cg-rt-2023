@@ -18,6 +18,8 @@
 const int SCREEN_WIDTH = 800;
 const int SCREEN_HEIGHT = 600;
 const float ASPECT_RATIO = static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT);
+const int MAX_RECURSION_DEPTH = 3;
+const float SHADOW_BIAS = 0.0001f;
 
 SDL_Renderer* renderer;
 std::vector<Object*> objects;
@@ -45,7 +47,7 @@ float castShadow(const glm::vec3& shadowOrig, const glm::vec3& lightDir, const s
     return 1.0f;
 }
 
-Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
+Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const short recursion = 0) {
     float zBuffer = 99999;
     Object* hitObject = nullptr;
     Intersect intersect;
@@ -59,10 +61,9 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
         }
     }
 
-    if (!intersect.isIntersecting) {
+    if (!intersect.isIntersecting || recursion >= MAX_RECURSION_DEPTH) {
         return Color(173, 216, 230);
     }
-
 
     glm::vec3 lightDir = glm::normalize(light.position - intersect.point);
     glm::vec3 viewDir = glm::normalize(rayOrigin - intersect.point);
@@ -81,7 +82,16 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
 
     Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo * shadowIntensity;
     Color specularLight = light.color * light.intensity * specLightIntensity * mat.specularAlbedo * shadowIntensity;
-    Color color = diffuseLight + specularLight;
+
+    
+    // If the material is reflective, cast a reflected ray
+    Color reflectedColor(0.0f, 0.0f, 0.0f);
+    if (mat.reflectivity > 0) {
+        glm::vec3 offsetOrigin = intersect.point + intersect.normal * SHADOW_BIAS; 
+        reflectedColor = castRay(offsetOrigin, reflectDir, recursion + 1);
+    }
+
+    Color color = (diffuseLight + specularLight) * (1 - mat.reflectivity) + reflectedColor * mat.reflectivity;
     return color;
 } 
 
@@ -90,29 +100,29 @@ void setUp() {
         Color(80, 0, 0),   // diffuse
         0.9,
         0.1,
-        10.0f
+        10.0f,
+        0.0f
     };
 
     Material ivory = {
         Color(100, 100, 80),
         0.5,
         0.5,
-        50.0f
+        50.0f,
+        0.2f
     };
 
-
-    objects.push_back(new Sphere(
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        1.0f,
-        rubber
-    ));
-    objects.push_back(
-        new Sphere(glm::vec3(
-            -1.0f,
-            0.0f,
-            -4.0f
-        ), 1.0f, ivory)
+    Material mirror(
+        Color(255, 255, 255),
+        0.0f,
+        10.0f,
+        1425.0f,
+        0.9f
     );
+
+    objects.push_back(new Sphere(glm::vec3(0.0f, 0.0f, 0.0f), 1.0f, rubber));
+    objects.push_back(new Sphere(glm::vec3(-1.0f, 0.0f, -4.0f), 1.0f, ivory));
+    objects.push_back(new Sphere(glm::vec3(1.0f, 0.0f, -4.0f), 1.0f, mirror));
 }
 
 void render() {
