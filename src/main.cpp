@@ -30,6 +30,21 @@ void point(glm::vec2 position, Color color) {
     SDL_RenderDrawPoint(renderer, position.x, position.y);
 }
 
+
+float castShadow(const glm::vec3& shadowOrig, const glm::vec3& lightDir, const std::vector<Object*>& objects, Object* hitObject) {
+    for (auto& obj : objects) {
+        if (obj != hitObject) {
+            Intersect shadowIntersect = obj->rayIntersect(shadowOrig, lightDir);
+            if (shadowIntersect.isIntersecting && shadowIntersect.dist > 0) {  // zbuffer?
+                const float shadowIntensity =  (1.0f - glm::min(1.0f, shadowIntersect.dist / glm::length(light.position - shadowOrig)));
+                return shadowIntensity;
+            }
+        }
+    }
+
+    return 1.0f;
+}
+
 Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
     float zBuffer = 99999;
     Object* hitObject = nullptr;
@@ -53,6 +68,10 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
     glm::vec3 viewDir = glm::normalize(rayOrigin - intersect.point);
     glm::vec3 reflectDir = glm::reflect(-lightDir, intersect.normal); 
 
+    float shadowIntensity = castShadow(
+        intersect.point + intersect.normal,
+        lightDir, objects, hitObject);
+
     float diffuseLightIntensity = std::max(0.0f, glm::dot(intersect.normal, lightDir));
     float specReflection = glm::dot(viewDir, reflectDir);
     
@@ -60,8 +79,8 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
 
     float specLightIntensity = std::pow(std::max(0.0f, glm::dot(viewDir, reflectDir)), mat.specularCoefficient);
 
-    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo;
-    Color specularLight = light.color * light.intensity * specLightIntensity * mat.specularAlbedo;
+    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo * shadowIntensity;
+    Color specularLight = light.color * light.intensity * specLightIntensity * mat.specularAlbedo * shadowIntensity;
     Color color = diffuseLight + specularLight;
     return color;
 } 
