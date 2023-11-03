@@ -7,4 +7,7 @@ struct Material {
   float albedo;
   float specularAlbedo;
   float specularCoefficient;
+  float reflectivity;
+  float transparency;
+  float refractionIndex;
 };

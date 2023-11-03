@@ -10,6 +10,7 @@
 #include <print.h>
 
 #include "color.h"
+#include "intersect.h"
 #include "object.h"
 #include "sphere.h"
 #include "light.h"
@@ -18,6 +19,8 @@
 const int SCREEN_WIDTH = 800;
 const int SCREEN_HEIGHT = 600;
 const float ASPECT_RATIO = static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT);
+const int MAX_RECURSION = 3;
+const float BIAS = 0.0001f;
 
 SDL_Renderer* renderer;
 std::vector<Object*> objects;
@@ -30,7 +33,21 @@ void point(glm::vec2 position, Color color) {
     SDL_RenderDrawPoint(renderer, position.x, position.y);
 }
 
-Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
+float castShadow(const glm::vec3& shadowOrigin, const glm::vec3& lightDir, Object* hitObject) {
+    for (auto& obj : objects) {
+        if (obj != hitObject) {
+            Intersect shadowIntersect = obj->rayIntersect(shadowOrigin, lightDir);
+            if (shadowIntersect.isIntersecting && shadowIntersect.dist > 0) {
+                float shadowRatio = shadowIntersect.dist / glm::length(light.position - shadowOrigin);
+                shadowRatio = glm::min(1.0f, shadowRatio);
+                return 1.0f - shadowRatio;
+            }
+        }
+    }
+    return 1.0f;
+}
+
+Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const short recursion = 0) {
     float zBuffer = 99999;
     Object* hitObject = nullptr;
     Intersect intersect;
@@ -44,7 +61,7 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
         }
     }
 
-    if (!intersect.isIntersecting) {
+    if (!intersect.isIntersecting || recursion == MAX_RECURSION) {
         return Color(173, 216, 230);
     }
 
@@ -53,6 +70,8 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
     glm::vec3 viewDir = glm::normalize(rayOrigin - intersect.point);
     glm::vec3 reflectDir = glm::reflect(-lightDir, intersect.normal); 
 
+    float shadowIntensity = castShadow(intersect.point, lightDir, hitObject);
+
     float diffuseLightIntensity = std::max(0.0f, glm::dot(intersect.normal, lightDir));
     float specReflection = glm::dot(viewDir, reflectDir);
     
@@ -60,9 +79,25 @@ Color castRay(const glm::vec3& rayOrigin, const glm::vec3& rayDirection) {
 
     float specLightIntensity = std::pow(std::max(0.0f, glm::dot(viewDir, reflectDir)), mat.specularCoefficient);
 
-    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo;
-    Color specularLight = light.color * light.intensity * specLightIntensity * mat.specularAlbedo;
-    Color color = diffuseLight + specularLight;
+
+    Color reflectedColor(0.0f, 0.0f, 0.0f);
+    if (mat.reflectivity > 0) {
+        glm::vec3 origin = intersect.point + intersect.normal * BIAS;
+        reflectedColor = castRay(origin, reflectDir, recursion + 1); 
+    }
+
+    Color refractedColor(0.0f, 0.0f, 0.0f);
+    if (mat.transparency > 0) {
+        glm::vec3 origin = intersect.point - intersect.normal * BIAS;
+        glm::vec3 refractDir = glm::refract(rayDirection, intersect.normal, mat.refractionIndex);
+        refractedColor = castRay(origin, refractDir, recursion + 1); 
+    }
+
+
+
+    Color diffuseLight = mat.diffuse * light.intensity * diffuseLightIntensity * mat.albedo * shadowIntensity;
+    Color specularLight = light.color * light.intensity * specLightIntensity * mat.specularAlbedo * shadowIntensity;
+    Color color = (diffuseLight + specularLight) * (1.0f - mat.reflectivity - mat.transparency) + reflectedColor * mat.reflectivity + refractedColor * mat.transparency;
     return color;
 } 
 
@@ -71,29 +106,41 @@ void setUp() {
         Color(80, 0, 0),   // diffuse
         0.9,
         0.1,
-        10.0f
+        10.0f,
+        0.0f,
+        0.0f
     };
 
     Material ivory = {
         Color(100, 100, 80),
         0.5,
         0.5,
-        50.0f
+        50.0f,
+        0.4f,
+        0.0f
     };
 
+    Material mirror = {
+        Color(255, 255, 255),
+        0.0f,
+        10.0f,
+        1425.0f,
+        0.9f,
+        0.0f
+    };
 
-    objects.push_back(new Sphere(
-        glm::vec3(0.0f, 0.0f, 0.0f),
+    Material glass = {
+        Color(255, 255, 255),
+        0.0f,
+        10.0f,
+        1425.0f,
+        0.2f,
         1.0f,
-        rubber
-    ));
-    objects.push_back(
-        new Sphere(glm::vec3(
-            -1.0f,
-            0.0f,
-            -4.0f
-        ), 1.0f, ivory)
-    );
+    };
+    objects.push_back(new Sphere(glm::vec3(0.0f, 0.0f, 0.0f), 1.0f, rubber));
+    objects.push_back(new Sphere(glm::vec3(-1.0f, 0.0f, -4.0f), 1.0f, ivory));
+    objects.push_back(new Sphere(glm::vec3(1.0f, 0.0f, -4.0f), 1.0f, mirror));
+    objects.push_back(new Sphere(glm::vec3(0.0f, 1.0f, -3.0f), 1.0f, glass));
 }
 
 void render() {
